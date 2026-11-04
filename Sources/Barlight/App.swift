@@ -136,7 +136,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setUpStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Barlight")
+        // Template, so macOS tints it for light, dark and the selected state.
+        let icon = NSImage(named: "MenuBarIcon")
+            ?? NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Barlight")
+        icon?.isTemplate = true
+        icon?.size = NSSize(width: 18, height: 18)
+        icon?.accessibilityDescription = "Barlight"
+        item.button?.image = icon
 
         let menu = NSMenu()
         menu.addItem(.sectionHeader(title: "Barlight"))
