@@ -26,6 +26,9 @@ struct MenuBarItem: @unchecked Sendable {
     /// Not in the menu bar right now: macOS moved it behind the » chevron.
     var isHidden: Bool { element == nil }
 
+    /// Tells items apart across scans: app plus the title the list shows.
+    var identityKey: String { "\(bundleID ?? appName)|\(title)" }
+
     /// Apple's own items: MenuBarAgent modules, the input menu and the like.
     var isSystem: Bool { bundleID?.hasPrefix("com.apple.") ?? false }
 

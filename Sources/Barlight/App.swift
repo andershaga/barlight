@@ -54,6 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.onRevealChanged = { [unowned self] revealing in panel.setRevealing(revealing) }
         store.refresh()
 
+        // After the welcome window's restart, carry on to Settings.
+        if CommandLine.arguments.contains("--open-settings") {
+            openSettings()
+        }
         // Debug aid: open the panel at launch, for screenshots without a keypress.
         if CommandLine.arguments.contains("--show-panel") {
             togglePanel()
@@ -106,11 +110,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !AXIsProcessTrusted() else { return }
         let onboarding = OnboardingWindowController(
             hotkey: HotkeyCombo.saved.displayString,
-            onGranted: { [unowned self] in store.refresh() },
-            onFinish: { [unowned self] in openSettings() }
+            onFinish: { Self.relaunch(openingSettings: true) }
         )
         onboardingWindow = onboarding
         onboarding.show()
+    }
+
+    /// Quits and starts a fresh copy. Needed once after the Accessibility
+    /// grant: apps queried before it keep refusing this process.
+    ///
+    /// A detached shell waits for this copy to exit, so the new one can
+    /// register the hotkey.
+    static func relaunch(openingSettings: Bool) {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = [
+            "-c", "sleep 0.5; /usr/bin/open -n \"$0\" --args \"$1\"",
+            Bundle.main.bundlePath, openingSettings ? "--open-settings" : "--relaunched",
+        ]
+        try? task.run()
+        NSApp.terminate(nil)
     }
 
     // MARK: Menu and Settings
