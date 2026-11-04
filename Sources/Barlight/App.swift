@@ -39,6 +39,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !register(combo) {
             log.error("could not register \(combo.displayString, privacy: .public); another app may own it")
         }
+        if Demo.isOn {
+            panel.onChoose = { _, _ in }
+            panel.onOpenSettings = { [unowned self] in openSettings() }
+            togglePanel()
+            return
+        }
         requestAccessibilityIfNeeded()
 
         store.onChange = { [unowned self] in panel.update(items: listedItems) }
@@ -89,6 +95,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func togglePanel() {
         if panel.isShowing {
             panel.dismiss()
+            return
+        }
+        if Demo.isOn {
+            panel.show(items: Demo.items)
             return
         }
         panel.show(items: listedItems)

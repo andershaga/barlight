@@ -176,7 +176,9 @@ final class SearchPanel: NSPanel, NSWindowDelegate, NSTextFieldDelegate, NSTable
 
     private func icon(for item: MenuBarItem) -> NSImage? {
         if let cached = iconCache[item.pid] { return cached }
-        let image: NSImage? = if item.bundleID == ItemScanner.menuBarAgentBundleID {
+        let image: NSImage? = if let demo = Demo.icon(for: item) {
+            demo
+        } else if item.bundleID == ItemScanner.menuBarAgentBundleID {
             NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/ControlCenter.app")
         } else {
             NSRunningApplication(processIdentifier: item.pid)?.icon
