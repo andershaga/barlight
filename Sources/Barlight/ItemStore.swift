@@ -21,6 +21,14 @@ final class ItemStore {
     private var didSeedThisLaunch = false
 
     func refresh() {
+        // Querying apps before Accessibility is granted makes some of them
+        // (Stats, Rectangle Pro…) keep refusing this process even after the
+        // grant, until Barlight restarts. So list memory only until then.
+        guard AXIsProcessTrusted() else {
+            items = Preferences.hiddenItemsMode == .remember ? merge([]) : []
+            onChange?()
+            return
+        }
         guard !isScanning else { return }
         isScanning = true
         let screens = NSScreen.screens.map(\.frame)
@@ -52,7 +60,8 @@ final class ItemStore {
                     onChange?()
                 }
             }
-            log.notice("scan (\(mode.rawValue, privacy: .public)): \(fresh.count) visible, \(self.items.count - fresh.count) hidden, \(Int(Date().timeIntervalSince(start) * 1000)) ms")
+            let hiddenApps = Set(items.filter(\.isHidden).map(\.appName)).sorted().joined(separator: ", ")
+            log.notice("scan (\(mode.rawValue, privacy: .public)): \(fresh.count) visible, \(self.items.count - fresh.count) hidden [\(hiddenApps, privacy: .public)], \(Int(Date().timeIntervalSince(start) * 1000)) ms")
             isScanning = false
         }
     }
@@ -75,42 +84,56 @@ final class ItemStore {
         ItemScanner.overflowChevron() != nil
     }
 
-    /// Presses », rescans until the count settles, closes » again, and
-    /// returns the visible items plus the newly revealed ones marked hidden.
+    /// Presses », reads the bar repeatedly, closes » again, and returns the
+    /// visible items plus every newly revealed one marked hidden.
+    ///
+    /// Reads are combined rather than taking the last one, because an app
+    /// that is slow to answer can drop out of any single read.
     @concurrent
     private nonisolated static func revealScan(screens: [CGRect], visible: [MenuBarItem]) async -> [MenuBarItem] {
         guard let chevron = ItemScanner.overflowChevron(),
               AXUIElementPerformAction(chevron, kAXPressAction as CFString) == .success
         else { return visible }
 
-        // Apps republish their bars over a few hundred ms; stop once stable.
-        var revealed = visible
-        for _ in 0..<6 {
+        let visibleKeys = Set(visible.map(\.identityKey))
+        var found: [String: MenuBarItem] = [:]
+        var quietReads = 0
+        // At least three reads; then stop after two in a row add nothing.
+        for read in 0..<8 {
             try? await Task.sleep(for: .milliseconds(150))
-            let scan = ItemScanner.scan(screens: screens)
-            if scan.count == revealed.count, scan.count > visible.count { break }
-            revealed = scan
+            var added = 0
+            for item in ItemScanner.scan(screens: screens) where !visibleKeys.contains(item.identityKey) {
+                if found.updateValue(item, forKey: item.identityKey) == nil { added += 1 }
+            }
+            quietReads = added == 0 ? quietReads + 1 : 0
+            if read >= 2, quietReads >= 2 { break }
         }
 
         if let chevron = ItemScanner.overflowChevron() {
             AXUIElementPerformAction(chevron, kAXPressAction as CFString)
         }
 
-        let visibleApps = Set(visible.compactMap(\.bundleID))
-        let hidden = revealed
-            .filter { $0.bundleID.map { !visibleApps.contains($0) } ?? false }
+        let hidden = found.values
             .map { $0.asHidden() }
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
         return visible + hidden
     }
 
     /// Updates memory with what is visible (plus anything just read through
-    /// »), then adds remembered items of running apps that showed nothing.
+    /// »), then lists every remembered item of a running app that is not
+    /// visible right now. Works per item, not per app: Stats can have two of
+    /// its four items in the bar and two behind ».
     private func merge(_ fresh: [MenuBarItem], revealed: [MenuBarItem] = []) -> [MenuBarItem] {
-        let visible = Dictionary(grouping: fresh.filter { $0.bundleID != nil }, by: { $0.bundleID! })
         let seen = Dictionary(grouping: (fresh + revealed).filter { $0.bundleID != nil }, by: { $0.bundleID! })
         for (bundleID, list) in seen {
-            remembered[bundleID] = list.map(RememberedItem.init)
+            let old = remembered[bundleID] ?? []
+            // Fewer items than remembered usually means the rest are behind »
+            // (a » read always sees the full set), so keep the unseen ones.
+            let titles = Set(list.map(\.title))
+            let kept = revealed.isEmpty && list.count < old.count
+                ? old.filter { !titles.contains($0.title) }.prefix(old.count - list.count)
+                : []
+            remembered[bundleID] = list.map(RememberedItem.init) + kept
         }
         RememberedItem.save(remembered)
 
@@ -118,10 +141,11 @@ final class ItemStore {
         for app in NSWorkspace.shared.runningApplications {
             if let id = app.bundleIdentifier { running[id] = app }
         }
+        let visibleKeys = Set(fresh.map(\.identityKey))
         let hidden = remembered
-            .filter { visible[$0.key] == nil }
             .compactMap { bundleID, list in running[bundleID].map { app in list.map { $0.item(bundleID: bundleID, app: app) } } }
             .flatMap { $0 }
+            .filter { !visibleKeys.contains($0.identityKey) }
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
         return fresh + hidden
     }
@@ -150,6 +174,11 @@ private struct RememberedItem: Codable {
         axIdentifier = item.axIdentifier
         duplicateNumber = item.duplicateNumber
         indexInApp = item.indexInApp
+    }
+
+    /// Matches MenuBarItem.title for the same item.
+    var title: String {
+        item(bundleID: "", app: .current).title
     }
 
     func item(bundleID: String, app: NSRunningApplication) -> MenuBarItem {

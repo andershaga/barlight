@@ -13,13 +13,11 @@ final class OnboardingWindowController: NSWindowController {
     private static let margin: CGFloat = 36
 
     private let hotkey: String
-    private let onGranted: () -> Void
-    /// After Done: hand over to Settings so the hotkey can be chosen.
+    /// After Done: restart Barlight and open Settings.
     private let onFinish: () -> Void
 
-    init(hotkey: String, onGranted: @escaping () -> Void, onFinish: @escaping () -> Void) {
+    init(hotkey: String, onFinish: @escaping () -> Void) {
         self.hotkey = hotkey
-        self.onGranted = onGranted
         self.onFinish = onFinish
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 440, height: 260),
@@ -82,10 +80,10 @@ final class OnboardingWindowController: NSWindowController {
         if isGranted {
             pollTimer?.invalidate()
             pollTimer = nil
-            statusLabel.stringValue = "Access granted. Press \(hotkey) anywhere to search your menu bar."
+            // Short enough for one line; the window does not grow.
+            statusLabel.stringValue = "Access granted. Click Done to restart Barlight."
             statusLabel.textColor = .systemGreen
             actionButton.title = "Done"
-            onGranted()
         } else {
             statusLabel.stringValue = "Waiting for access…"
             statusLabel.textColor = .secondaryLabelColor
