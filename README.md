@@ -6,6 +6,15 @@ Search your Mac's menu bar from the keyboard. Press a hotkey, type part of an it
 
 It finds every menu bar item, including the ones macOS hides behind the » overflow chevron when the bar runs out of space.
 
+## Install
+
+1. Download `Barlight-<version>.zip` from [Releases](https://github.com/andershaga/barlight/releases) and unzip it.
+2. Move `Barlight.app` to `/Applications` and open it.
+3. macOS says it can't verify the app, because Barlight isn't notarized. Click **Done**, then go to System Settings › Privacy & Security and click **Open Anyway** next to Barlight. You only do this once.
+4. Follow the welcome window to grant Accessibility. Barlight then restarts and is ready.
+
+Works on Apple silicon and Intel Macs.
+
 ## Use
 
 | Key | Action |
@@ -45,6 +54,12 @@ scripts/build-app.sh
 This builds `Barlight.app` in `~/Library/Caches/Barlight-build/`, ad-hoc signed. Copy it to `/Applications` and open it. The welcome window walks you through granting Accessibility.
 
 Ad-hoc signed builds lose the Accessibility grant on every rebuild, so grant it again after each one.
+
+To build a universal release zip in `dist/`:
+
+```bash
+scripts/release.sh
+```
 
 To regenerate the app icon from `Resources/AppIcon.svg`:
 
