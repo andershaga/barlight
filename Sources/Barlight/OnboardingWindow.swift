@@ -97,8 +97,21 @@ final class OnboardingWindowController: NSWindowController {
             onFinish()
             return
         }
-        // Asking once puts Barlight in the Accessibility list, ready to switch on.
-        _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": false] as CFDictionary)
-        NSWorkspace.shared.open(Self.settingsURL)
+        // The first click asks macOS, which adds Barlight to the Accessibility
+        // list (a fresh install has no entry to switch on) and shows its own
+        // dialog with a button to System Settings. macOS asks only once, so
+        // later clicks open Settings directly.
+        if !didPrompt {
+            didPrompt = true
+            _ = AXIsProcessTrustedWithOptions([Self.promptOption: true] as CFDictionary)
+        } else {
+            NSWorkspace.shared.open(Self.settingsURL)
+        }
     }
+
+    private var didPrompt = false
+
+    /// The value of kAXTrustedCheckOptionPrompt. Swift 6 refuses to read the
+    /// SDK constant itself, which it imports as shared mutable state.
+    private static let promptOption = "AXTrustedCheckOptionPrompt"
 }

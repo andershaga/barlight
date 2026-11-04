@@ -48,9 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestAccessibilityIfNeeded()
 
         store.onChange = { [unowned self] in panel.update(items: listedItems) }
-        panel.onChoose = { item, alternate in
+        panel.onChoose = { [unowned self] item, alternate in
             Recents.record(item)
-            Activator.open(item, alternate: alternate)
+            store.whenChevronFree { Activator.open(item, alternate: alternate) }
         }
         panel.onOpenSettings = { [unowned self] in openSettings() }
         store.onRevealChanged = { [unowned self] revealing in panel.setRevealing(revealing) }
