@@ -112,19 +112,23 @@ enum ItemScanner {
             ?? children.first { string($0, kAXRoleAttribute) == kAXButtonRole }
     }
 
-    /// Numbers repeated names and records each item's position in its app.
+    /// Numbers names that repeat within one app and records each item's
+    /// position in its app. Per app, so another app's item with the same name
+    /// cannot shift these titles, which identityKey is built from.
     private static func numberDuplicates(_ items: [MenuBarItem]) -> [MenuBarItem] {
-        let counts = Dictionary(grouping: items, by: \.name).mapValues(\.count)
+        func appKey(_ item: MenuBarItem) -> String { item.bundleID ?? "\(item.pid)" }
+        func nameKey(_ item: MenuBarItem) -> String { "\(appKey(item))|\(item.name)" }
+        let counts = Dictionary(grouping: items, by: nameKey).mapValues(\.count)
         var seen: [String: Int] = [:]
         var perApp: [String: Int] = [:]
         return items.map { item in
             var copy = item
-            let appKey = item.bundleID ?? "\(item.pid)"
-            copy.indexInApp = perApp[appKey, default: 0]
-            perApp[appKey, default: 0] += 1
-            if counts[item.name, default: 0] > 1 {
-                seen[item.name, default: 0] += 1
-                copy.duplicateNumber = seen[item.name]
+            copy.indexInApp = perApp[appKey(item), default: 0]
+            perApp[appKey(item), default: 0] += 1
+            let key = nameKey(item)
+            if counts[key, default: 0] > 1 {
+                seen[key, default: 0] += 1
+                copy.duplicateNumber = seen[key]
             }
             return copy
         }

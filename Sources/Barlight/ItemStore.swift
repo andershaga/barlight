@@ -33,7 +33,12 @@ final class ItemStore {
         isScanning = true
         let screens = NSScreen.screens.map(\.frame)
         let mode = Preferences.hiddenItemsMode
+        // Claim » for the whole scan, not just the reveal: an item chosen
+        // before the reveal starts would otherwise press » just as it does.
+        let mayReveal = mode == .reveal || !didSeedThisLaunch
+        if mayReveal { chevronBusy = true }
         Task {
+            defer { if mayReveal { releaseChevron() } }
             let start = Date()
             let fresh = await Self.scan(screens: screens)
 
@@ -66,6 +71,22 @@ final class ItemStore {
         }
     }
 
+    /// Runs action now, or once a scan that may press » has finished.
+    /// Opening a hidden item presses » too, and two presses cancel out.
+    func whenChevronFree(_ action: @escaping () -> Void) {
+        chevronBusy ? waitingForChevron.append(action) : action()
+    }
+
+    private var chevronBusy = false
+    private var waitingForChevron: [() -> Void] = []
+
+    private func releaseChevron() {
+        chevronBusy = false
+        let waiting = waitingForChevron
+        waitingForChevron = []
+        waiting.forEach { $0() }
+    }
+
     /// How many items memory holds, across all apps (running or not).
     var rememberedCount: Int { remembered.values.reduce(0) { $0 + $1.count } }
 
@@ -95,14 +116,21 @@ final class ItemStore {
               AXUIElementPerformAction(chevron, kAXPressAction as CFString) == .success
         else { return visible }
 
-        let visibleKeys = Set(visible.map(\.identityKey))
+        // Visible items are told apart by their AX element, not their title:
+        // a revealed duplicate renumbers them ("Widget" → "Widget 1"), and by
+        // title they would then come back as hidden copies of themselves.
+        let visibleElements = visible.compactMap(\.element)
+        func wasVisible(_ item: MenuBarItem) -> Bool {
+            guard let element = item.element else { return false }
+            return visibleElements.contains { CFEqual($0, element) }
+        }
         var found: [String: MenuBarItem] = [:]
         var quietReads = 0
         // At least three reads; then stop after two in a row add nothing.
         for read in 0..<8 {
             try? await Task.sleep(for: .milliseconds(150))
             var added = 0
-            for item in ItemScanner.scan(screens: screens) where !visibleKeys.contains(item.identityKey) {
+            for item in ItemScanner.scan(screens: screens) where !wasVisible(item) {
                 if found.updateValue(item, forKey: item.identityKey) == nil { added += 1 }
             }
             quietReads = added == 0 ? quietReads + 1 : 0
