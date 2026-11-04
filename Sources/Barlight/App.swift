@@ -9,11 +9,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var searchHotkey: Hotkey?
     private var settingsWindow: SettingsWindowController?
+    private var onboardingWindow: OnboardingWindowController?
     private let store = ItemStore()
     private let panel = SearchPanel()
 
     static func main() {
         let app = NSApplication.shared
+        if CommandLine.arguments.contains("--probe-overflow") {
+            print(Diagnostics.probeOverflow())
+            return
+        }
+        if CommandLine.arguments.contains("--dump-raw") {
+            print(Diagnostics.rawDump())
+            return
+        }
         // `--dump` prints one scan and exits; handy from a terminal.
         if CommandLine.arguments.contains("--dump") {
             let start = Date()
@@ -37,7 +46,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestAccessibilityIfNeeded()
 
         store.onChange = { [unowned self] in panel.update(items: listedItems) }
-        panel.onChoose = { item in Self.open(item) }
+        panel.onChoose = { item, alternate in
+            Recents.record(item)
+            Activator.open(item, alternate: alternate)
+        }
+        panel.onOpenSettings = { [unowned self] in openSettings() }
+        store.onRevealChanged = { [unowned self] revealing in panel.setRevealing(revealing) }
         store.refresh()
 
         // Debug aid: open the panel at launch, for screenshots without a keypress.
@@ -86,25 +100,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Preferences.includeSystemItems ? store.items : store.items.filter { !$0.isSystem }
     }
 
-    /// Temporary: a plain AXPress. Step 4 adds fallbacks and the right/left menu choice.
-    /// Off the main thread, because some apps block AXPress until their menu closes.
-    private static func open(_ item: MenuBarItem) {
-        log.notice("opening \(item.title, privacy: .public) (\(item.appName, privacy: .public))")
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result = AXUIElementPerformAction(item.element, kAXPressAction as CFString)
-            if result != .success {
-                log.error("AXPress failed for \(item.title, privacy: .public): \(result.rawValue)")
-            }
-        }
-    }
-
-    /// Names and pressing need Accessibility; without it the scan still lists
-    /// windows, but only by app name.
+    /// Names and pressing need Accessibility; without it the first-run
+    /// window explains why and waits for the grant.
     private func requestAccessibilityIfNeeded() {
-        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-        if !AXIsProcessTrustedWithOptions(options) {
-            log.notice("Accessibility not granted yet; prompted")
-        }
+        guard !AXIsProcessTrusted() else { return }
+        let onboarding = OnboardingWindowController(
+            hotkey: HotkeyCombo.saved.displayString,
+            onGranted: { [unowned self] in store.refresh() },
+            onFinish: { [unowned self] in openSettings() }
+        )
+        onboardingWindow = onboarding
+        onboarding.show()
     }
 
     // MARK: Menu and Settings
@@ -125,6 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if settingsWindow == nil {
             settingsWindow = SettingsWindowController(
                 current: .saved,
+                store: store,
                 apply: { [unowned self] combo in register(combo) },
                 setPaused: { [unowned self] paused in
                     if paused { searchHotkey?.unregister() } else { register(.saved) }

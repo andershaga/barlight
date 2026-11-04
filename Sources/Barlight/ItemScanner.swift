@@ -15,10 +15,16 @@ struct MenuBarItem: @unchecked Sendable {
     let axDescription: String?
     let axHelp: String?
     let axIdentifier: String?
-    /// The element to press.
-    let element: AXUIElement
+    /// The element to press; nil for a remembered item hidden behind ».
+    let element: AXUIElement?
     /// Set when the same app shows several items with the same name.
     var duplicateNumber: Int?
+    /// Position among its app's items, right to left. Finds a hidden item
+    /// again when its name has changed ("Disconnected" → "Connected").
+    var indexInApp = 0
+
+    /// Not in the menu bar right now: macOS moved it behind the » chevron.
+    var isHidden: Bool { element == nil }
 
     /// Apple's own items: MenuBarAgent modules, the input menu and the like.
     var isSystem: Bool { bundleID?.hasPrefix("com.apple.") ?? false }
@@ -34,6 +40,18 @@ struct MenuBarItem: @unchecked Sendable {
     /// What the list shows: name, numbered when it repeats ("Badgeify 2").
     var title: String {
         duplicateNumber.map { "\(name) \($0)" } ?? name
+    }
+
+    /// The same item marked hidden: its element dies once » closes.
+    func asHidden() -> MenuBarItem {
+        var copy = MenuBarItem(
+            pid: pid, appName: appName, bundleID: bundleID, frame: .null, isOnScreen: false,
+            axTitle: axTitle, axDescription: axDescription, axHelp: axHelp, axIdentifier: axIdentifier,
+            element: nil
+        )
+        copy.duplicateNumber = duplicateNumber
+        copy.indexInApp = indexInApp
+        return copy
     }
 }
 
@@ -68,14 +86,43 @@ enum ItemScanner {
         return numberDuplicates(results.values.sorted { $0.frame.minX > $1.frame.minX })
     }
 
+    /// The items of one app, right to left; used while waiting for a hidden
+    /// item to reappear.
+    static func items(bundleID: String) -> [MenuBarItem] {
+        let ownBundleID = Bundle.main.bundleIdentifier
+        let found = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).flatMap {
+            items(of: $0, ownBundleID: ownBundleID, screens: [], primaryHeight: 0)
+        }
+        return numberDuplicates(found.sorted { $0.frame.minX > $1.frame.minX })
+    }
+
+    /// The » button that reveals items macOS has hidden for lack of space.
+    static func overflowChevron() -> AXUIElement? {
+        guard let agent = NSRunningApplication.runningApplications(withBundleIdentifier: menuBarAgentBundleID).first
+        else { return nil }
+        let appElement = AXUIElementCreateApplication(agent.processIdentifier)
+        AXUIElementSetMessagingTimeout(appElement, axTimeout)
+        guard let bar: AXUIElement = value(appElement, kAXExtrasMenuBarAttribute) else { return nil }
+        if let button: AXUIElement = value(bar, "AXOverflowButton") { return button }
+        let children: [AXUIElement] = value(bar, kAXChildrenAttribute) ?? []
+        return children.first { string($0, kAXIdentifierAttribute) == "menu-bar-overflow-indicator" }
+            ?? children.first { string($0, kAXRoleAttribute) == kAXButtonRole }
+    }
+
+    /// Numbers repeated names and records each item's position in its app.
     private static func numberDuplicates(_ items: [MenuBarItem]) -> [MenuBarItem] {
         let counts = Dictionary(grouping: items, by: \.name).mapValues(\.count)
         var seen: [String: Int] = [:]
+        var perApp: [String: Int] = [:]
         return items.map { item in
-            guard counts[item.name, default: 0] > 1 else { return item }
             var copy = item
-            seen[item.name, default: 0] += 1
-            copy.duplicateNumber = seen[item.name]
+            let appKey = item.bundleID ?? "\(item.pid)"
+            copy.indexInApp = perApp[appKey, default: 0]
+            perApp[appKey, default: 0] += 1
+            if counts[item.name, default: 0] > 1 {
+                seen[item.name, default: 0] += 1
+                copy.duplicateNumber = seen[item.name]
+            }
             return copy
         }
     }
@@ -104,9 +151,14 @@ enum ItemScanner {
             if let ownBundleID, owner?.bundleIdentifier == ownBundleID { continue }
             let ownerIsSystem = owner?.bundleIdentifier?.hasPrefix("com.apple.") ?? false
 
-            // Some apps put the description on the button inside the container.
+            // MenuBarAgent wraps each item in an AXGroup with no actions; the
+            // pressable AXMenuBarItem and its name sit one level down.
             let inner: [AXUIElement] = value(child, kAXChildrenAttribute) ?? []
-            let description = string(child, kAXDescriptionAttribute)
+            let target = string(child, kAXRoleAttribute) == kAXGroupRole
+                ? inner.first { string($0, kAXRoleAttribute) == kAXMenuBarItemRole } ?? child
+                : child
+            let description = string(target, kAXDescriptionAttribute)
+                ?? string(child, kAXDescriptionAttribute)
                 ?? inner.lazy.compactMap { string($0, kAXDescriptionAttribute) }.first
 
             // AX uses a top-left origin on the primary screen; NSScreen uses bottom-left.
@@ -118,11 +170,11 @@ enum ItemScanner {
                 bundleID: owner?.bundleIdentifier,
                 frame: frame,
                 isOnScreen: screens.contains { $0.insetBy(dx: 0, dy: -1).intersects(appKitFrame) },
-                axTitle: string(child, kAXTitleAttribute),
+                axTitle: string(target, kAXTitleAttribute),
                 axDescription: description,
-                axHelp: string(child, kAXHelpAttribute),
-                axIdentifier: string(child, kAXIdentifierAttribute),
-                element: child
+                axHelp: string(target, kAXHelpAttribute),
+                axIdentifier: string(target, kAXIdentifierAttribute),
+                element: target
             ))
         }
         return items
@@ -172,7 +224,7 @@ extension ItemScanner {
         for item in items {
             lines.append(String(
                 format: "%@ %-30@ app=%-22@ x=%5.0f w=%3.0f id=%@",
-                item.isOnScreen ? "●" : "○",
+                item.isHidden ? "»" : item.isOnScreen ? "●" : "○",
                 item.title as NSString,
                 item.appName as NSString,
                 item.frame.minX, item.frame.width,

@@ -7,7 +7,10 @@ import AppKit
 @MainActor
 final class SearchPanel: NSPanel, NSWindowDelegate, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     /// Called with the chosen item after the panel has closed.
-    var onChoose: ((MenuBarItem) -> Void)?
+    /// The flag is true for ⌥Return / ⌥click, which asks for the right-click menu.
+    var onChoose: ((MenuBarItem, _ alternate: Bool) -> Void)?
+    /// ⌘, while the panel is open.
+    var onOpenSettings: (() -> Void)?
 
     private static let width: CGFloat = 680
     private static let fieldHeight: CGFloat = 56
@@ -79,7 +82,19 @@ final class SearchPanel: NSPanel, NSWindowDelegate, NSTextFieldDelegate, NSTable
         orderOut(nil)
     }
 
+    /// While Barlight presses » itself, the panel loses key focus to the
+    /// menu bar; that must not close it.
+    private var isRevealing = false
+
+    func setRevealing(_ revealing: Bool) {
+        isRevealing = revealing
+        if !revealing, isVisible, !isKeyWindow {
+            makeKey()
+        }
+    }
+
     func windowDidResignKey(_ notification: Notification) {
+        guard !isRevealing else { return }
         dismiss()
     }
 
@@ -103,15 +118,25 @@ final class SearchPanel: NSPanel, NSWindowDelegate, NSTextFieldDelegate, NSTable
         table.scrollRowToVisible(row)
     }
 
-    private func choose(row: Int) {
+    private func choose(row: Int, alternate: Bool = false) {
         guard results.indices.contains(row) else { return }
         let item = results[row]
         dismiss()
-        onChoose?(item)
+        onChoose?(item, alternate)
     }
 
     @objc private func rowClicked() {
-        choose(row: table.clickedRow)
+        choose(row: table.clickedRow, alternate: NSEvent.modifierFlags.contains(.option))
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if modifiers == .command, event.charactersIgnoringModifiers == "," {
+            dismiss()
+            onOpenSettings?()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 
     func controlTextDidChange(_ obj: Notification) {
@@ -123,6 +148,8 @@ final class SearchPanel: NSPanel, NSWindowDelegate, NSTextFieldDelegate, NSTable
         case #selector(moveUp(_:)): moveSelection(by: -1)
         case #selector(moveDown(_:)): moveSelection(by: 1)
         case #selector(insertNewline(_:)): choose(row: table.selectedRow)
+        // ⌥Return reaches the field editor as insertNewlineIgnoringFieldEditor.
+        case #selector(NSTextView.insertNewlineIgnoringFieldEditor(_:)): choose(row: table.selectedRow, alternate: true)
         case #selector(cancelOperation(_:)): dismiss()
         default: return false
         }
@@ -141,7 +168,7 @@ final class SearchPanel: NSPanel, NSWindowDelegate, NSTextFieldDelegate, NSTable
         let cell = tableView.makeView(withIdentifier: ResultCell.identifier, owner: nil) as? ResultCell ?? ResultCell()
         let item = results[row]
         cell.titleField.stringValue = item.title
-        cell.subtitleField.stringValue = item.appName
+        cell.subtitleField.stringValue = item.isHidden ? "\(item.appName) · hidden behind »" : item.appName
         cell.iconView.image = icon(for: item)
         return cell
     }
@@ -172,7 +199,10 @@ final class SearchPanel: NSPanel, NSWindowDelegate, NSTextFieldDelegate, NSTable
             // Measure the table rather than multiplying row heights: the inset
             // style adds its own padding above the first and below the last row.
             let rows = min(results.count, Self.maxVisibleRows)
-            let tableHeight = table.rect(ofRow: rows - 1).maxY + table.rect(ofRow: 0).minY
+            // When the list scrolls, stop right at the last whole row: the
+            // inset style's bottom padding would show a sliver of the next.
+            let bottomPadding = results.count > rows ? 0 : table.rect(ofRow: 0).minY
+            let tableHeight = table.rect(ofRow: rows - 1).maxY + bottomPadding
             listHeight = Self.listChrome + tableHeight
         }
         scrollView.isHidden = results.isEmpty
