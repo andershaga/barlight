@@ -2,9 +2,11 @@
 
 # Barlight
 
-Search your Mac's menu bar from the keyboard. Press a hotkey, type part of an item's name, press Return, and its menu opens.
+Find any menu bar item without hunting for it.
 
-It finds every menu bar item, including the ones macOS hides behind the » overflow chevron when the bar runs out of space.
+Menu bars fill up fast. When you already know what you want, scanning a row of tiny icons to find it is wasted time. With Barlight you press a hotkey, type part of the item's name, and press Return to open its menu. Your hands never leave the keyboard.
+
+It finds every item, including the ones macOS hides behind the » overflow chevron when the bar runs out of space.
 
 <p align="center"><img src="docs/screenshot.png" width="726" alt="The Barlight search panel listing menu bar items"></p>
 
