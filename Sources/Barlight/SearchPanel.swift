@@ -14,10 +14,11 @@ final class SearchPanel: NSPanel, NSWindowDelegate, NSTextFieldDelegate, NSTable
 
     private static let width: CGFloat = 680
     private static let fieldHeight: CGFloat = 56
+    private static let footerHeight: CGFloat = 34
     private static let rowHeight: CGFloat = 44
     private static let maxVisibleRows = 8
-    /// Separator, gap above the list and margin below it.
-    private static let listChrome: CGFloat = 1 + 4 + 10
+    /// Separator, gap above the list and gap below it, before the footer.
+    private static let listChrome: CGFloat = 1 + 4 + 6
 
     private let field = NSTextField()
     private let table = NSTableView()
@@ -209,7 +210,7 @@ final class SearchPanel: NSPanel, NSWindowDelegate, NSTextFieldDelegate, NSTable
         emptyLabel.isHidden = !showsMessage
         separator.isHidden = listHeight == 0
 
-        let height = Self.fieldHeight + listHeight
+        let height = Self.fieldHeight + listHeight + Self.footerHeight
         setFrame(NSRect(x: frame.minX, y: topY - height, width: Self.width, height: height), display: true)
         // A borderless window's shadow follows its drawn shape, but only when
         // told to; otherwise the old rectangle shows at the rounded corners.
@@ -265,7 +266,9 @@ final class SearchPanel: NSPanel, NSWindowDelegate, NSTextFieldDelegate, NSTable
         emptyLabel.textColor = .secondaryLabelColor
         emptyLabel.font = .systemFont(ofSize: 14)
 
-        for view in [glyph, field, separator, scrollView, emptyLabel] as [NSView] {
+        let footer = Self.makeFooter()
+
+        for view in [glyph, field, separator, scrollView, emptyLabel, footer] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
@@ -283,11 +286,74 @@ final class SearchPanel: NSPanel, NSWindowDelegate, NSTextFieldDelegate, NSTable
             scrollView.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 4),
             scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
+            scrollView.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -6),
+
+            footer.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            footer.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            footer.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            footer.heightAnchor.constraint(equalToConstant: Self.footerHeight),
 
             emptyLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             emptyLabel.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 12),
         ])
+    }
+}
+
+extension SearchPanel {
+    /// "Barlight" on the left so the panel says whose it is, and the keys
+    /// on the right. ⌥Return is left out: most apps show the same menu for
+    /// it as for Return, so it would only add noise.
+    fileprivate static func makeFooter() -> NSView {
+        let footer = NSView()
+
+        let line = NSBox()
+        line.boxType = .separator
+
+        let icon = NSImageView(image: NSApp.applicationIconImage)
+        let name = NSTextField(labelWithString: "Barlight")
+        name.font = .systemFont(ofSize: 12, weight: .semibold)
+        name.textColor = .secondaryLabelColor
+        let brand = NSStackView(views: [icon, name])
+        brand.spacing = 6
+
+        let hints = NSTextField(labelWithAttributedString: hintText([
+            ("↩", "Open"), ("⌘,", "Settings"),
+        ]))
+
+        for view in [line, brand, hints] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            footer.addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            line.topAnchor.constraint(equalTo: footer.topAnchor),
+            line.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 16),
+            line.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -16),
+
+            icon.widthAnchor.constraint(equalToConstant: 16),
+            icon.heightAnchor.constraint(equalToConstant: 16),
+            brand.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 20),
+            brand.centerYAnchor.constraint(equalTo: footer.centerYAnchor, constant: 1),
+
+            hints.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -20),
+            hints.centerYAnchor.constraint(equalTo: brand.centerYAnchor),
+        ])
+        return footer
+    }
+
+    /// "↩ Open   ⌘, Settings", keys a shade stronger.
+    private static func hintText(_ pairs: [(key: String, action: String)]) -> NSAttributedString {
+        let text = NSMutableAttributedString()
+        let font = NSFont.systemFont(ofSize: 12)
+        for (index, pair) in pairs.enumerated() {
+            if index > 0 { text.append(NSAttributedString(string: "    ")) }
+            text.append(NSAttributedString(string: pair.key + " ", attributes: [
+                .font: NSFont.systemFont(ofSize: 12, weight: .medium), .foregroundColor: NSColor.secondaryLabelColor,
+            ]))
+            text.append(NSAttributedString(string: pair.action, attributes: [
+                .font: font, .foregroundColor: NSColor.tertiaryLabelColor,
+            ]))
+        }
+        return text
     }
 }
 
