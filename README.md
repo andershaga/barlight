@@ -85,7 +85,7 @@ log stream --predicate 'subsystem == "digital.haga.Barlight"'
 
 ## Credits
 
-Inspired by the search panel in [Thaw](https://github.com/thaw-app/Thaw). Barlight is written from scratch and contains no Thaw code.
+Inspired by [Ice](https://github.com/jordanbaird/Ice) by Jordan Baird and [Thaw](https://github.com/thaw-app/Thaw), which builds on Ice, and especially their menu bar search panels. Barlight is written from scratch and contains no code from either.
 
 ## License
 

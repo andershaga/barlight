@@ -51,7 +51,7 @@ A macOS agent app (`LSUIElement`). A hotkey opens a Spotlight-style panel listin
 
 ## Conventions
 
-- [Thaw](https://github.com/thaw-app/Thaw) (GPL‑3) is a reference for ideas only. Barlight is clean-room and MIT, so never copy Thaw code.
+- [Ice](https://github.com/jordanbaird/Ice) and its successor [Thaw](https://github.com/thaw-app/Thaw) (both GPL‑3) are references for ideas only. Barlight is clean-room and MIT, so never copy code from either.
 - Take screenshots for docs with `open Barlight.app --args --demo`, so the user's own apps never appear.
 - Use AppKit only, and no third-party dependencies.
 - Comments explain *why*, briefly; match the existing density.
