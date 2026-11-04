@@ -6,6 +6,8 @@ Search your Mac's menu bar from the keyboard. Press a hotkey, type part of an it
 
 It finds every menu bar item, including the ones macOS hides behind the » overflow chevron when the bar runs out of space.
 
+<p align="center"><img src="docs/screenshot.png" width="726" alt="The Barlight search panel listing menu bar items"></p>
+
 ## Install
 
 1. Download `Barlight-<version>.zip` from [Releases](https://github.com/andershaga/barlight/releases) and unzip it.
@@ -72,6 +74,7 @@ swift scripts/make-icon.swift
 ```bash
 Barlight.app/Contents/MacOS/Barlight --dump       # one scan, printed as a table
 Barlight.app/Contents/MacOS/Barlight --dump-raw   # every Accessibility element in the menu bar
+open Barlight.app --args --demo                   # panel with stock macOS items, for screenshots
 ```
 
 Logs use the subsystem `digital.haga.Barlight`:
