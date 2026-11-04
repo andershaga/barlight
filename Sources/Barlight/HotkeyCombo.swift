@@ -10,7 +10,9 @@ struct HotkeyCombo: Codable, Equatable {
     /// What the key looked like when recorded, e.g. "1" or "K".
     var keyLabel: String
 
-    static let defaultSearch = HotkeyCombo(keyCode: kVK_ANSI_1, modifiers: cmdKey, keyLabel: "1")
+    /// ⇧⌘Space: Spotlight's ⌘Space plus Shift, so "Spotlight for the menu
+    /// bar" is easy to remember, and unlike ⌘1 no app uses it for tabs.
+    static let defaultSearch = HotkeyCombo(keyCode: kVK_Space, modifiers: cmdKey | shiftKey, keyLabel: "Space")
 
     /// Builds a combo from a key press, or nil when it has no ⌘, ⌥ or ⌃,
     /// since a bare key or ⇧-only key would swallow normal typing.

@@ -1,17 +1,21 @@
 import Foundation
 
-/// Ranks items against what the user typed.
+/// Ranks items against what the user typed, with often-used items first.
 enum Matcher {
-    /// Matching items, best first. An empty query keeps the given order.
+    /// Matching items, best first. With no query, used items lead and the
+    /// rest keep menu bar order.
     static func filter(_ items: [MenuBarItem], query: String) -> [MenuBarItem] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !q.isEmpty else { return items }
+        let frecency = Recents.scores(for: items)
 
         return items.enumerated()
             .compactMap { index, item -> (score: Int, index: Int, item: MenuBarItem)? in
+                guard !q.isEmpty else { return (frecency[index], index, item) }
                 // The item's own name beats its app's name.
-                let score = max(score(item.title.lowercased(), q), score(item.appName.lowercased(), q) - 10)
-                return score > 0 ? (score, index, item) : nil
+                let text = max(score(item.title.lowercased(), q), score(item.appName.lowercased(), q) - 10)
+                guard text > 0 else { return nil }
+                // Usage lifts an item within roughly one match tier, no further.
+                return (text + min(frecency[index], 20), index, item)
             }
             .sorted { $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index }
             .map(\.item)
