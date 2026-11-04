@@ -150,11 +150,41 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         grid.row(at: 8).topPadding = 4
         memoryRow = grid.row(at: 8)
 
-        let content = NSStackView(views: [grid])
+        let separator = NSBox()
+        separator.boxType = .separator
+        let content = NSStackView(views: [Self.header(), separator, grid])
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 18
         content.edgeInsets = NSEdgeInsets(top: 22, left: 24, bottom: 22, right: 24)
+        separator.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -48).isActive = true
         window.contentView = content
         updateHiddenItemsSection()
         window.setContentSize(content.fittingSize)
+    }
+
+    /// App icon, name and version, so the window reads as Barlight's.
+    private static func header() -> NSView {
+        let icon = NSImageView(image: NSApp.applicationIconImage)
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        icon.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        icon.heightAnchor.constraint(equalToConstant: 48).isActive = true
+
+        let name = NSTextField(labelWithString: "Barlight")
+        name.font = .systemFont(ofSize: 17, weight: .semibold)
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let detail = NSTextField(labelWithString: ["Search your menu bar", version.map { "Version \($0)" }]
+            .compactMap { $0 }.joined(separator: " · "))
+        detail.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        detail.textColor = .secondaryLabelColor
+
+        let text = NSStackView(views: [name, detail])
+        text.orientation = .vertical
+        text.alignment = .leading
+        text.spacing = 2
+        let header = NSStackView(views: [icon, text])
+        header.spacing = 12
+        return header
     }
 
     private static func label(_ text: String) -> NSTextField {
