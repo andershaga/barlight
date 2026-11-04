@@ -15,10 +15,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     static func main() {
         let app = NSApplication.shared
-        if CommandLine.arguments.contains("--probe-overflow") {
-            print(Diagnostics.probeOverflow())
-            return
-        }
         if CommandLine.arguments.contains("--dump-raw") {
             print(Diagnostics.rawDump())
             return

@@ -33,46 +33,6 @@ enum Diagnostics {
         return sections.withLock { $0.joined(separator: "\n") }
     }
 
-    /// `Barlight --probe-overflow`: presses the » chevron and reports which
-    /// extras bars appear while hidden items are revealed, then closes it.
-    static func probeOverflow() -> String {
-        var out: [String] = ["trusted=\(AXIsProcessTrusted())"]
-        out.append("before: " + barSummary())
-
-        guard let agent = NSRunningApplication.runningApplications(withBundleIdentifier: ItemScanner.menuBarAgentBundleID).first,
-              let bar = element(AXUIElementCreateApplication(agent.processIdentifier), kAXExtrasMenuBarAttribute),
-              let chevron = children(bar).first(where: { string($0, kAXIdentifierAttribute) == "menu-bar-overflow-indicator" })
-                ?? element(bar, "AXOverflowButton")
-        else {
-            out.append("no overflow chevron found")
-            return out.joined(separator: "\n")
-        }
-        out.append("chevron: " + describe(chevron))
-        out.append("press: \(AXUIElementPerformAction(chevron, kAXPressAction as CFString).rawValue)")
-
-        for delay in [0.3, 0.8, 1.5] {
-            Thread.sleep(forTimeInterval: delay == 0.3 ? 0.3 : 0.5)
-            out.append("after \(delay)s: " + barSummary())
-        }
-        out.append("--- full dump while revealed ---")
-        out.append(rawDump())
-
-        out.append("close: \(AXUIElementPerformAction(chevron, kAXPressAction as CFString).rawValue)")
-        Thread.sleep(forTimeInterval: 0.5)
-        out.append("after close: " + barSummary())
-        return out.joined(separator: "\n")
-    }
-
-    /// "App(children) …" for every app exposing an extras bar.
-    private static func barSummary() -> String {
-        NSWorkspace.shared.runningApplications.compactMap { app -> String? in
-            let appElement = AXUIElementCreateApplication(app.processIdentifier)
-            AXUIElementSetMessagingTimeout(appElement, 0.5)
-            guard let bar = element(appElement, kAXExtrasMenuBarAttribute) else { return nil }
-            return "\(app.localizedName ?? "?")(\(children(bar).count))"
-        }.joined(separator: " ")
-    }
-
     private static func describe(_ element: AXUIElement) -> String {
         var pid: pid_t = 0
         AXUIElementGetPid(element, &pid)
